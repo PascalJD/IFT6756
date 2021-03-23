@@ -1,0 +1,134 @@
+import torch
+import torch.nn as nn
+import torch.functional as F 
+import numpy as np
+from utils import to_device
+
+"""
+https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/wgan/wgan.py
+"""
+
+class Discriminator(nn.Module):
+
+    def __init__(self, input_size=9):
+        super(Discriminator, self).__init__()
+        
+        self.input_size = input_size
+
+        self.model = nn.Sequential(
+            nn.Linear(self.input_size, 512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(256, 1)
+        )
+    
+    def forward(self, x):
+        return self.model(x)
+
+    def loss(self, output_real, output_synth):
+        return -torch.mean(output_real) + torch.mean(output_synth)
+
+
+class Generator(nn.Module):
+
+    def __init__(self, latent_dim, input_size=9):
+        super(Generator, self).__init__()
+
+        self.latent_dim = latent_dim
+        self.input_size = input_size
+
+        def block(input_size, output_size, normalize=True):
+            layers = [nn.Linear(input_size, output_size)]
+            if normalize:
+                layers.append(nn.BatchNorm1d(output_size, eps=0.8))
+            layers.append(nn.LeakyReLU(0.2, inplace=True))
+            return layers
+
+        self.model = nn.Sequential(
+            *block(self.latent_dim, 128, normalize=False),  # Unpacking array
+            *block(128, 256),
+            *block(256, 512),
+            *block(512, 1024),
+            nn.Linear(1024, self.input_size),
+            nn.Tanh()
+        )
+
+    def forward(self, z):
+        return self.model(z)
+
+    def loss(self, output_D):
+        return -torch.mean(output_D)
+
+
+class Wgan(nn.Module):
+    
+    def __init__(self, args):
+        super(Wgan, self).__init__()
+
+        # Miscellaneous
+        self.device = args.device
+
+        # Data
+        self.batch_size = args.batch_size
+
+        # Models
+        self.input_size = args.input_size
+        self.latent_dim = args.latent_dim
+
+        self.G = Generator(self.latent_dim, self.input_size).to(self.device)
+        self.D = Discriminator(self.input_size).to(self.device)
+
+        # Optimization
+        self.n_critic = args.n_critic
+        self.clip_value = args.clip_value
+        self.lr = args.lr
+        self.epochs = args.epochs
+        self.optimizer_G = torch.optim.RMSprop(self.G.parameters(), self.lr)
+        self.optimizer_D = torch.optim.RMSprop(self.D.parameters(), self.lr)
+
+
+    def train(self, dataloader):
+
+        # model.train()
+
+        losses_D = []
+        losses_G = []
+        for epoch in range(self.epochs):
+            for idx, batch in enumerate(dataloader):
+
+                batch = to_device(batch, self.device)  # Variable ? 
+                
+                # Train Discriminator 
+                self.optimizer_D.zero_grad()
+                # Sample noice
+                z = torch.FloatTensor(np.random.normal(0, 1, size=(batch.shape[0], self.latent_dim)), device=self.device)  # Variable ? 
+                # Batch of synthetic examples
+                synth_batch = self.G(z).detach()  # Why detach ?  
+                # Model outputs 
+                output_real = self.D(batch)
+                output_synth = self.D(synth_batch)
+                # Loss 
+                loss_D = self.D.loss(output_real, output_synth)
+                losses_D.append(loss_D.item())
+                loss_D.backward()
+                self.optimizer_D.step
+                # Clip weights
+                for p in self.D.parameters():
+                    p.data.clamp_(-self.clip_value, self.clip_value)
+
+                # Train generator every n_critic iterations
+                if idx % self.n_critic == 0:
+                    self.optimizer_G.zero_grad()
+                    # loss
+                    loss_G = self.G.loss(self.D(synth_batch))
+                    losses_G.append(loss_G.item())
+                    loss_G.backward()
+                    self.optimizer_G.step()
+
+                # if idx % 100 == 0:
+                #     print(f"\nEpoch {epoch}, Iteration {idx}, D loss: {loss_D.item()}, G loss: {loss_G.item()}")
+                #     print(f"sample example: {synth_batch[0]}")
+          
+        return losses_D, losses_G
+    

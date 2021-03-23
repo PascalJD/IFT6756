@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": "/Users/Pascal/anaconda/envs/envalgoTrade/bin/python"
+    "python.pythonPath": "/Users/Pascal/anaconda/envs/envalgoTrade/bin/python",
+    "python.linting.pylintArgs": ["--errors-only", "--generated-members=numpy.*, torch.*, cv2.*, cv.*", "--disable-msg=not-callable"]
 }
