@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.functional as F 
+from torch.autograd import Variable
 import numpy as np
 from utils import to_device
 
@@ -51,14 +52,15 @@ class Generator(nn.Module):
             *block(256, 512),
             *block(512, 1024),
             nn.Linear(1024, self.input_size),
-            nn.Tanh()
+            # nn.Tanh()
+            nn.ReLU()
         )
 
     def forward(self, z):
         return self.model(z)
 
-    def loss(self, output_D):
-        return -torch.mean(output_D)
+    def loss(self, output_synth):
+        return -torch.mean(output_synth)
 
 
 class Wgan(nn.Module):
@@ -94,15 +96,15 @@ class Wgan(nn.Module):
 
         losses_D = []
         losses_G = []
-        for epoch in range(self.epochs):
+        for epoch in range(2):
             for idx, batch in enumerate(dataloader):
 
-                batch = to_device(batch, self.device)  # Variable ? 
+                batch = Variable(to_device(batch, self.device))  # Variable ? 
                 
                 # Train Discriminator 
                 self.optimizer_D.zero_grad()
                 # Sample noice
-                z = torch.FloatTensor(np.random.normal(0, 1, size=(batch.shape[0], self.latent_dim)), device=self.device)  # Variable ? 
+                z = Variable(torch.FloatTensor(np.random.normal(0, 1, size=(batch.shape[0], self.latent_dim)), device=self.device))  # Variable ? 
                 # Batch of synthetic examples
                 synth_batch = self.G(z).detach()  # Why detach ?  
                 # Model outputs 
@@ -112,7 +114,7 @@ class Wgan(nn.Module):
                 loss_D = self.D.loss(output_real, output_synth)
                 losses_D.append(loss_D.item())
                 loss_D.backward()
-                self.optimizer_D.step
+                self.optimizer_D.step()
                 # Clip weights
                 for p in self.D.parameters():
                     p.data.clamp_(-self.clip_value, self.clip_value)
@@ -126,9 +128,10 @@ class Wgan(nn.Module):
                     loss_G.backward()
                     self.optimizer_G.step()
 
-                # if idx % 100 == 0:
-                #     print(f"\nEpoch {epoch}, Iteration {idx}, D loss: {loss_D.item()}, G loss: {loss_G.item()}")
-                #     print(f"sample example: {synth_batch[0]}")
+                if idx % 100 == 0:
+                    print(f"Epoch {epoch}, Iteration {idx}, D loss: {loss_D.item()}, G loss: {loss_G.item()}")
+                    print(f"real example: {batch[0]}")
+                    print(f"sample example: {synth_batch[0]}")
           
         return losses_D, losses_G
     

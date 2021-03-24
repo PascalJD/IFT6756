@@ -41,27 +41,30 @@ class Arguments:
   # print_every: int = 10
 
 
-# Load data
-train = pd.read_csv('data/TrainValTest/train.csv', index_col=0)
-val = pd.read_csv('data/TrainValTest/train.csv', index_col=0)
-test = pd.read_csv('data/TrainValTest/train.csv', index_col=0)
+# Load data (numpy arrays)
+train = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values
+val = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values
+test = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values 
 
-train_tensor = torch.tensor(train.values, dtype=torch.float32)
-val_tensor = torch.tensor(val.values, dtype=torch.float32)
-test_tensor = torch.tensor(test.values, dtype=torch.float32)
+# Normalize data
+norm_train = (train - train.mean(axis=0)) / np.var(train, axis=0)  # Shouldn't be a biaised var ?
+
+
+train_tensor = torch.tensor(norm_train, dtype=torch.float32)
+# val_tensor = torch.tensor(val, dtype=torch.float32)
+# test_tensor = torch.tensor(test, dtype=torch.float32)
 
 def main(args):
   # Data
   train_dataloader = DataLoader(train_tensor,
                                 batch_size=args.batch_size,
                                 shuffle=False)
-  val_dataloader = DataLoader(val_tensor,
-                              batch_size=args.batch_size,
-                              shuffle=False)
-  test_dataloader = DataLoader(test_tensor,
-                               batch_size=args.batch_size,
-                               shuffle=False)
-  
+  # val_dataloader = DataLoader(val_tensor,
+  #                             batch_size=args.batch_size,
+  #                             shuffle=False)
+  # test_dataloader = DataLoader(test_tensor,
+  #                              batch_size=args.batch_size,
+  #                              shuffle=False)
   # Model
   model = Wgan(args)
 
