@@ -24,11 +24,14 @@ class Discriminator(nn.Module):
             nn.Linear(256, 1)
         )
     
+
     def forward(self, x):
         return self.model(x)
 
+
     def loss(self, output_real, output_synth):
         return -torch.mean(output_real) + torch.mean(output_synth)
+
 
 
 class Generator(nn.Module):
@@ -52,8 +55,7 @@ class Generator(nn.Module):
             *block(256, 512),
             *block(512, 1024),
             nn.Linear(1024, self.input_size),
-            # nn.Tanh()
-            nn.ReLU()
+            nn.Tanh()
         )
 
     def forward(self, z):
@@ -61,6 +63,7 @@ class Generator(nn.Module):
 
     def loss(self, output_synth):
         return -torch.mean(output_synth)
+
 
 
 class Wgan(nn.Module):
@@ -94,9 +97,11 @@ class Wgan(nn.Module):
 
         # model.train()
 
+        Tensor = torch.cuda.FloatTensor if self.device == "cuda" else torch.FloatTensor
+
         losses_D = []
         losses_G = []
-        for epoch in range(2):
+        for epoch in range(self.epochs):
             for idx, batch in enumerate(dataloader):
 
                 batch = Variable(to_device(batch, self.device))  # Variable ? 
@@ -104,7 +109,7 @@ class Wgan(nn.Module):
                 # Train Discriminator 
                 self.optimizer_D.zero_grad()
                 # Sample noice
-                z = Variable(torch.FloatTensor(np.random.normal(0, 1, size=(batch.shape[0], self.latent_dim)), device=self.device))  # Variable ? 
+                z = Variable(Tensor(np.random.normal(0, 1, size=(batch.shape[0], self.latent_dim))))#, device=self.device))  # Variable ? 
                 # Batch of synthetic examples
                 synth_batch = self.G(z).detach()  # Why detach ?  
                 # Model outputs 
@@ -130,8 +135,105 @@ class Wgan(nn.Module):
 
                 if idx % 100 == 0:
                     print(f"Epoch {epoch}, Iteration {idx}, D loss: {loss_D.item()}, G loss: {loss_G.item()}")
-                    print(f"real example: {batch[0]}")
-                    print(f"sample example: {synth_batch[0]}")
+                    # print(f"real example: {batch[0]}")
+                    # print(f"sample example: {synth_batch[0]}")
           
         return losses_D, losses_G
+
+
+
+class Encoder(nn.Module):
+
+    def __init__(self, input_size=9, embedding_dim=128, hidden=128):
+        super(Encoder, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.input_size = input_size
+        self.hidden = hidden
+
+        self.model = nn.Sequential(
+            nn.Linear(self.input_size, self.hidden),
+            nn.ReLU(),
+            nn.Linear(self.hidden, self.embedding_dim),
+            nn.Tanh(),
+        )
     
+
+    def forward(self, x):
+        return self.model(x)
+
+
+
+class Decoder(nn.Module):
+
+    def __init__(self, input_size=9, embedding_dim=128, hidden=128):
+        super(Decoder, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.input_size = input_size
+        self.hidden = hidden
+
+        self.model = nn.Sequential(
+            nn.Linear(self.embedding_dim, self.hidden),
+            nn.ReLU(),
+            nn.Linear(self.hidden, self.input_size),
+            nn.ReLU(),
+        )
+    
+
+    def forward(self, x):
+        return self.model(x)
+
+
+
+class Autoencoder(nn.Module):
+
+    def __init__(self, input_size=9, embedding_dim=128, hidden=128, epochs=10, batch_size=16, device="cpu"):
+        super(Autoencoder, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.input_size = input_size
+        self.hidden = hidden
+        self.epochs = epochs
+        self.batch_size = batch_size
+
+        self.encoder = Encoder(self.input_size, self.embedding_dim, self.hidden)
+        self.decoder = Decoder(self.input_size ,self.embedding_dim, self.hidden)
+
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        self.loss = nn.MSELoss()
+
+        self.device = device
+
+
+    def train(self, train_loader, val_loader):
+
+        train_losses = []
+        val_losses = []
+        
+        for epoch in range(self.epochs):
+
+            train_loss = 0
+            val_loss = 0
+
+            # Train
+            for idx, batch in enumerate(train_loader):
+
+                target = Variable(to_device(batch, self.device))
+                reconstruction = self.decoder(self.encoder(target))
+
+                loss = self.loss(reconstruction, target)
+                loss.backward()
+                self.optimizer.step()
+                train_loss += loss.item()
+
+            # Val
+            for idx, batch in enumerate(val_loader):
+
+                target = Variable(to_device(batch, self.device))
+                reconstruction = self.decoder(self.encoder(target))           
+                
+                loss = self.loss(reconstruction, target)
+                val_loss += loss.item()
+
+            train_losses.append(train_loss/len(train_loader))
+            val_losses.append(val_loss/len(val_loader))
+        
+        return train_losses, val_losses

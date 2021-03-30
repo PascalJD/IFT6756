@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-from wgan import Wgan
+from wgan import Wgan, Autoencoder
 from utils import to_device, train_val_test_split
 
 import torch
@@ -42,16 +42,12 @@ class Arguments:
 
 
 # Load data (numpy arrays)
-train = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values
-val = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values
-test = pd.read_csv('data/TrainValTest/train.csv', index_col=0).values 
+train = pd.read_csv('data/TrainValTest/train.csv', index_col=0).drop(["AGEP"], axis=1).values
+val = pd.read_csv('data/TrainValTest/val.csv', index_col=0).drop(["AGEP"], axis=1).values
+test = pd.read_csv('data/TrainValTest/test.csv', index_col=0).drop(["AGEP"], axis=1).values 
 
-# Normalize data
-norm_train = (train - train.mean(axis=0)) / np.var(train, axis=0)  # Shouldn't be a biaised var ?
-
-
-train_tensor = torch.tensor(norm_train, dtype=torch.float32)
-# val_tensor = torch.tensor(val, dtype=torch.float32)
+train_tensor = torch.tensor(train, dtype=torch.float32)
+val_tensor = torch.tensor(val, dtype=torch.float32)
 # test_tensor = torch.tensor(test, dtype=torch.float32)
 
 def main(args):
@@ -59,20 +55,16 @@ def main(args):
   train_dataloader = DataLoader(train_tensor,
                                 batch_size=args.batch_size,
                                 shuffle=False)
-  # val_dataloader = DataLoader(val_tensor,
-  #                             batch_size=args.batch_size,
-  #                             shuffle=False)
+  val_dataloader = DataLoader(val_tensor,
+                              batch_size=args.batch_size,
+                              shuffle=False)
   # test_dataloader = DataLoader(test_tensor,
   #                              batch_size=args.batch_size,
   #                              shuffle=False)
-  # Model
-  model = Wgan(args)
 
-  # Training
-  losses_D, losses_G = model.train(train_dataloader)
+  ae = Autoencoder(8, 8, 4, 50, 16)
+  
+  return ae.train(train_dataloader, val_dataloader)
 
-  return losses_D, losses_G
-
-args = Arguments(device="cpu")
-losses_G, losses_G = main(args)
-
+args = Arguments(device="cpu", epochs=1)
+train_loss, val_loss = main(args)
