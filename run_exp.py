@@ -1,3 +1,7 @@
+from utils import to_device
+import numpy as np
+import torch
+
 def train_autoencoder(model, train_loader, val_loader, optimizer, args):
 
     # Init
@@ -35,3 +39,57 @@ def train_autoencoder(model, train_loader, val_loader, optimizer, args):
         # Average loss over the batches during the training
         model.logs["train loss"].append(running_loss/train_size)
         model.logs["val loss"].append(running_val_loss/train_size)
+
+
+def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
+
+    # Initialization
+    Tensor = torch.cuda.FloatTensor if args.device == "cuda" else torch.FloatTensor
+    train_size = len(train_loader.dataset)
+    decoder = args.decoder.to(args.device)
+
+    for epoch in range(args.epochs):
+
+        running_loss_D = 0
+
+        for idx, batch in enumerate(train_loader):
+
+            batch = to_device(batch, args.device)
+            batch_size = batch.shape[0]
+            # Train discriminator
+            optimizer_D.zero_grad()
+            # Noise
+            z = Tensor(np.random.normal(0, 1, size=(batch_size, args.random_dim)))
+            # Generate synthetic examples
+            batch_synthetic = model.G(z).detach()  # No gradient for generator's parameters
+            # Decode
+            batch_synthetic = decoder(batch_synthetic)
+            # Discriminator outputs
+            y_real = model.D(batch)
+            y_synthetic = model.D(batch_synthetic)
+            # Loss & Update
+            loss_D = model.D.loss(y_real, y_synthetic)
+            s_loss_D = loss_D * batch_size  # Involutive operation lol (/m, *m)
+            running_loss_D += s_loss_D
+            loss_D.backward()
+            optimizer_D.step()
+            # Clip weights
+            for p in model.D.parameters():
+                p.data.clamp_(-args.clip_value, args.clip_value)
+            
+            # Train generator ever n_critic iterations
+            if idx % args.n_critic == 0:
+                optimizer_G.zero_grad()
+                # Generate synthetic examples
+                batch_synthetic = model.G(z)
+                # Decode them
+                batch_synthetic = decoder(batch_synthetic)
+                # Loss & Update
+                loss_G = model.G.loss(model.D(batch_synthetic))  # model.D(batch_synthetic)
+                loss_G.backward()
+                optimizer_G.step()
+
+            if args.verbose and idx % 100 == 0:
+                print(f"Epoch {epoch}, Iteration {idx}, D average loss: {loss_D.item()}, G average loss: {loss_G.item()}")
+
+        model.D.logs["train loss"].append(running_loss_D/train_size)

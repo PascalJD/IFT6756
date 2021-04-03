@@ -10,135 +10,83 @@ https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/wgan/
 """
 
 # W-MedGan
-
 class Discriminator(nn.Module):
 
-    def __init__(self, input_size=9):
+    def __init__(self, args):
         super(Discriminator, self).__init__()
 
-        self.input_size = input_size
+        self.input_dim = args.input_dim
+        self.embedding_dim = args.embedding_dim
+        self.hidden = args.hidden_D
 
-        self.model = nn.Sequential(
-            nn.Linear(self.input_size, 512),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 1)
-        )
+        self.input_layer = nn.Linear(self.input_dim, self.hidden[0])
+        self.input_activation = nn.ReLU()
+        self.layers = nn.ModuleList()
+        for i in range(1, len(self.hidden)):
+            self.layers.append(nn.Linear(self.hidden[i-1], self.hidden[i]))
+            self.layers.append(nn.ReLU())
+        self.output_layer = nn.Linear(self.hidden[-1], 1)
+
+        self.logs = {"train loss": [], "val loss": []}
 
     def forward(self, x):
-        return self.model(x)
+        x = self.input_layer(x)
+        x = self.input_activation(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.output_layer(x)
+        return x
 
-    def loss(self, output_real, output_synth):
-        return -torch.mean(output_real) + torch.mean(output_synth)
+    def loss(self, y_real, y_synthetic):
+        return -torch.mean(y_real) + torch.mean(y_synthetic)
 
 
 class Generator(nn.Module):
 
-    def __init__(self, latent_dim, input_size=9):
+    def __init__(self, args):
         super(Generator, self).__init__()
 
-        self.latent_dim = latent_dim
-        self.input_size = input_size
+        self.random_dim = args.random_dim
+        self.embedding_dim = args.embedding_dim
+        self.hidden = args.hidden_G
 
-        def block(input_size, output_size, normalize=True):
-            layers = [nn.Linear(input_size, output_size)]
-            if normalize:
-                layers.append(nn.BatchNorm1d(output_size, eps=0.8))
-            layers.append(nn.LeakyReLU(0.2, inplace=True))
-            return layers
+        self.decoder = args.decoder
 
-        self.model = nn.Sequential(
-            *block(self.latent_dim, 128, normalize=False),  # Unpacking array
-            *block(128, 256),
-            *block(256, 512),
-            *block(512, 1024),
-            nn.Linear(1024, self.input_size),
-            nn.Tanh()
-        )
+        self.input_layer = nn.Linear(self.random_dim, self.hidden[0])
+        self.input_activation = nn.ReLU()
+        self.layers = nn.ModuleList()
+        for i in range(1, len(self.hidden)):
+            self.layers.append(nn.Linear(self.hidden[i-1], self.hidden[i]))
+            self.layers.append(nn.ReLU())
+        self.output_layer = nn.Linear(self.hidden[-1], self.embedding_dim)
+        self.output_activation = nn.Tanh()
 
-    def forward(self, z):
-        return self.model(z)
+        self.logs = {"train loss": [], "val loss": []}
 
-    def loss(self, output_synth):
-        return -torch.mean(output_synth)
+    def forward(self, x):
+        x = self.input_layer(x)
+        x = self.input_activation(x)
+        for layer in self.layers:
+            x = layer(x)
+        x = self.output_layer(x)
+        x = self.output_activation(x)
+        return x
+
+    def loss(self, y_synthetic):
+        return -torch.mean(y_synthetic)
 
 
-class Wgan(nn.Module):
+class GAN(nn.Module):
 
     def __init__(self, args):
-        super(Wgan, self).__init__()
+        super(GAN, self).__init__()
 
-        # Miscellaneous
-        self.device = args.device
+        self.random_dim = args.random_dim
+        self.embedding_dim = args.embedding_dim
+        
+        self.G = Generator(args)
+        self.D = Discriminator(args)
 
-        # Data
-        self.batch_size = args.batch_size
-
-        # Models
-        self.input_size = args.input_size
-        self.latent_dim = args.latent_dim
-
-        self.G = Generator(self.latent_dim, self.input_size).to(self.device)
-        self.D = Discriminator(self.input_size).to(self.device)
-
-        # Optimization
-        self.n_critic = args.n_critic
-        self.clip_value = args.clip_value
-        self.lr = args.lr
-        self.epochs = args.epochs
-        self.optimizer_G = torch.optim.RMSprop(self.G.parameters(), self.lr)
-        self.optimizer_D = torch.optim.RMSprop(self.D.parameters(), self.lr)
-
-    def train(self, dataloader):
-
-        # model.train()
-
-        Tensor = torch.cuda.FloatTensor if self.device == "cuda" else torch.FloatTensor
-
-        losses_D = []
-        losses_G = []
-        for epoch in range(self.epochs):
-            for idx, batch in enumerate(dataloader):
-
-                batch = Variable(to_device(batch, self.device))  # Variable ?
-
-                # Train Discriminator
-                self.optimizer_D.zero_grad()
-                # Sample noice
-                # , device=self.device))  # Variable ?
-                z = Variable(Tensor(np.random.normal(
-                    0, 1, size=(batch.shape[0], self.latent_dim))))
-                # Batch of synthetic examples
-                synth_batch = self.G(z).detach()  # Why detach ?
-                # Model outputs
-                output_real = self.D(batch)
-                output_synth = self.D(synth_batch)
-                # Loss
-                loss_D = self.D.loss(output_real, output_synth)
-                losses_D.append(loss_D.item())
-                loss_D.backward()
-                self.optimizer_D.step()
-                # Clip weights
-                for p in self.D.parameters():
-                    p.data.clamp_(-self.clip_value, self.clip_value)
-
-                # Train generator every n_critic iterations
-                if idx % self.n_critic == 0:
-                    self.optimizer_G.zero_grad()
-                    # loss
-                    loss_G = self.G.loss(self.D(synth_batch))
-                    losses_G.append(loss_G.item())
-                    loss_G.backward()
-                    self.optimizer_G.step()
-
-                if idx % 100 == 0:
-                    print(
-                        f"Epoch {epoch}, Iteration {idx}, D loss: {loss_D.item()}, G loss: {loss_G.item()}")
-                    # print(f"real example: {batch[0]}")
-                    # print(f"sample example: {synth_batch[0]}")
-
-        return losses_D, losses_G
 
 
 # Autoencoder
