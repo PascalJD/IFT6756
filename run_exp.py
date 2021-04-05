@@ -2,6 +2,7 @@ from utils import to_device
 import numpy as np
 import torch
 
+
 def train_autoencoder(model, train_loader, val_loader, optimizer, args):
 
     # Init
@@ -50,8 +51,6 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
 
     for epoch in range(args.epochs):
 
-        running_loss_D = 0
-
         for idx, batch in enumerate(train_loader):
 
             batch = to_device(batch, args.device)
@@ -59,9 +58,11 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             # Train discriminator
             optimizer_D.zero_grad()
             # Noise
-            z = Tensor(np.random.normal(0, 1, size=(batch_size, args.random_dim)))
+            z = Tensor(np.random.normal(
+                0, 1, size=(batch_size, args.random_dim)))
             # Generate synthetic examples
-            batch_synthetic = model.G(z).detach()  # No gradient for generator's parameters
+            # No gradient for generator's parameters
+            batch_synthetic = model.G(z).detach()
             # Decode
             batch_synthetic = decoder(batch_synthetic)
             # Discriminator outputs
@@ -69,27 +70,25 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             y_synthetic = model.D(batch_synthetic)
             # Loss & Update
             loss_D = model.D.loss(y_real, y_synthetic)
-            s_loss_D = loss_D * batch_size  # Involutive operation lol (/m, *m)
-            running_loss_D += s_loss_D
             loss_D.backward()
             optimizer_D.step()
             # Clip weights
             for p in model.D.parameters():
                 p.data.clamp_(-args.clip_value, args.clip_value)
-            
+
             # Train generator ever n_critic iterations
             if idx % args.n_critic == 0:
+                # The loss function at this point is an approximate of EM distance
+                model.logs["approx. EM distance"].append(loss_D.item())
                 optimizer_G.zero_grad()
                 # Generate synthetic examples
                 batch_synthetic = model.G(z)
-                # Decode them
+                # Decode
                 batch_synthetic = decoder(batch_synthetic)
                 # Loss & Update
-                loss_G = model.G.loss(model.D(batch_synthetic))  # model.D(batch_synthetic)
+                loss_G = model.G.loss(model.D(batch_synthetic))
                 loss_G.backward()
                 optimizer_G.step()
-
-            if args.verbose and idx % 100 == 0:
-                print(f"Epoch {epoch}, Iteration {idx}, D average loss: {loss_D.item()}, G average loss: {loss_G.item()}")
-
-        model.D.logs["train loss"].append(running_loss_D/train_size)
+                if args.verbose and idx % 100 == 0:
+                    print(
+                        f"Epoch {epoch}, Iteration {idx}, Appriximation of EM distance: {loss_D.item()}")

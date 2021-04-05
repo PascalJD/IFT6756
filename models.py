@@ -10,6 +10,7 @@ https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/wgan/
 """
 
 # W-MedGan
+
 class Discriminator(nn.Module):
 
     def __init__(self, args):
@@ -83,10 +84,11 @@ class GAN(nn.Module):
 
         self.random_dim = args.random_dim
         self.embedding_dim = args.embedding_dim
-        
+
         self.G = Generator(args)
         self.D = Discriminator(args)
 
+        self.logs = {"approx. EM distance": []}
 
 
 # Autoencoder
