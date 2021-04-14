@@ -4,6 +4,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
 
 
 def to_device(tensors, device):
@@ -52,6 +53,8 @@ def generate_samples(generator, batch_size, random_dim):
     return np.round(batch_synthetic.cpu().detach().numpy())
 
 
+# Model evaluation
+
 def DWP(train_real: pd.DataFrame, 
         train_synthetic: pd.DataFrame, 
         val: pd.DataFrame, 
@@ -75,3 +78,32 @@ def DWP(train_real: pd.DataFrame,
     f1_synthetic = f1_score(val_label, pred_synthetic, average="weighted")
 
     return f1_real, f1_synthetic
+
+
+# Security considerations
+
+def attribute_disclosure(train_df, synthetic_df, m, s, k):
+    """
+    m: number of train examples
+    s: number of unknown random attributes (the ones to be guessed)
+    k: number of neighbors to guess s for each m
+    """
+    errors = 0
+    train_idx = np.random.choice(train_df.index.values, m, replace=False)
+    for index in train_idx:
+        r = train_df.loc[index]
+        # Randomly select s attributes
+        attributes = np.random.choice(train_df.columns, s, replace=False)
+        # KNN 
+        knn = KNeighborsClassifier(k)
+        for attribute in attributes:
+            # attribute is the current label
+            r_label = r[attribute]
+            labels = synthetic_df[attribute]
+            # prediction
+            knn.fit(synthetic_df.drop([*attributes], axis=1), labels)
+            pred_label = knn.predict([r.drop([*attributes])])
+            if pred_label != r_label:
+                errors += 1
+    # return errors/m  # Mean error
+    return errors
