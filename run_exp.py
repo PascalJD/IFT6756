@@ -72,7 +72,7 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             loss_D = model.D.loss(y_real, y_synthetic)
             loss_D.backward()
             optimizer_D.step()
-            # Clip weights
+            # Clip weights (Lipschitz)
             for p in model.D.parameters():
                 p.data.clamp_(-args.clip_value, args.clip_value)
 

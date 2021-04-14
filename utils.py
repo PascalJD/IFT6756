@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
+from sklearn.linear_model import LogisticRegression
 
 
 def to_device(tensors, device):
@@ -48,3 +50,28 @@ def generate_samples(generator, batch_size, random_dim):
     batch_synthetic = generator(z)
     batch_synthetic = generator.decoder(batch_synthetic)
     return np.round(batch_synthetic.cpu().detach().numpy())
+
+
+def DWP(train_real: pd.DataFrame, 
+        train_synthetic: pd.DataFrame, 
+        val: pd.DataFrame, 
+        label: str):
+    # Data
+    label_real = train_real[label].values
+    train_real = train_real.drop([label], axis=1).values
+    label_synthetic = train_synthetic[label].values
+    train_synthetic = train_synthetic.drop([label], axis=1).values
+    val_label = val[label].values
+    val = val.drop([label], axis=1)
+
+    # Logistic regression
+    model_real = LogisticRegression().fit(train_real, label_real)
+    model_synthetic = LogisticRegression().fit(train_synthetic, label_synthetic)
+
+    # Evaluate performance
+    pred_real = model_real.predict(val)
+    pred_synthetic = model_synthetic.predict(val)
+    f1_real = f1_score(val_label, pred_real, average="weighted")
+    f1_synthetic = f1_score(val_label, pred_synthetic, average="weighted")
+
+    return f1_real, f1_synthetic
