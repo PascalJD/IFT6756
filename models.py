@@ -50,8 +50,12 @@ class Generator(nn.Module):
         self.random_dim = args.random_dim
         self.embedding_dim = args.embedding_dim
         self.hidden = args.hidden_G
+        self.is_finetuning = args.is_finetuning
 
-        self.decoder = args.decoder
+        self.decoder = args.decoder.to(args.device)
+        if not self.is_finetuning:
+            for params in self.decoder.parameters():
+                params.require_grad = False
 
         self.input_layer = nn.Linear(self.random_dim, self.hidden[0])
         self.input_activation = nn.ReLU()
@@ -71,6 +75,7 @@ class Generator(nn.Module):
             x = layer(x)
         x = self.output_layer(x)
         x = self.output_activation(x)
+        x = self.decoder(x)
         return x
 
     def loss(self, y_synthetic):

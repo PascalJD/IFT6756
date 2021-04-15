@@ -47,7 +47,6 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
     # Initialization
     Tensor = torch.cuda.FloatTensor if args.device == "cuda" else torch.FloatTensor
     train_size = len(train_loader.dataset)
-    decoder = args.decoder.to(args.device)
 
     for epoch in range(args.epochs):
 
@@ -61,10 +60,7 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             z = Tensor(np.random.normal(
                 0, 1, size=(batch_size, args.random_dim)))
             # Generate synthetic examples
-            # No gradient for generator's parameters
-            batch_synthetic = model.G(z).detach()
-            # Decode
-            batch_synthetic = decoder(batch_synthetic)
+            batch_synthetic = model.G(z).detach()  # No gradient for generator's parameters
             # Discriminator outputs
             y_real = model.D(batch)
             y_synthetic = model.D(batch_synthetic)
@@ -83,8 +79,6 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
                 optimizer_G.zero_grad()
                 # Generate synthetic examples
                 batch_synthetic = model.G(z)
-                # Decode
-                batch_synthetic = decoder(batch_synthetic)
                 # Loss & Update
                 loss_G = model.G.loss(model.D(batch_synthetic))
                 loss_G.backward()

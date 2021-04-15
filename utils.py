@@ -49,7 +49,6 @@ def generate_samples(generator, batch_size, random_dim):
     z = torch.FloatTensor(np.random.normal(
         0, 1, size=(batch_size, random_dim)))
     batch_synthetic = generator(z)
-    batch_synthetic = generator.decoder(batch_synthetic)
     return np.round(batch_synthetic.cpu().detach().numpy())
 
 
