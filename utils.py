@@ -45,9 +45,12 @@ def train_val_test_split(df,
     return train, val, test
 
 
-def generate_samples(generator, batch_size, random_dim):
-    z = torch.FloatTensor(np.random.normal(
-        0, 1, size=(batch_size, random_dim)))
+def generate_samples(generator, batch_size, args):
+    Tensor = torch.cuda.FloatTensor if args.device == "cuda" else torch.FloatTensor
+    generator.to(args.device)
+    # model needs to be on device before
+    z = Tensor(np.random.normal(
+        0, 1, size=(batch_size, args.random_dim)))
     batch_synthetic = generator(z)
     return np.round(batch_synthetic.cpu().detach().numpy())
 

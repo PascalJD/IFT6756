@@ -43,11 +43,11 @@ def train_autoencoder(model, train_loader, val_loader, optimizer, args):
 
 
 def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
-
     # Initialization
     Tensor = torch.cuda.FloatTensor if args.device == "cuda" else torch.FloatTensor
     train_size = len(train_loader.dataset)
-
+    model.to(args.device)
+    
     for epoch in range(args.epochs):
 
         for idx, batch in enumerate(train_loader):
@@ -58,7 +58,7 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             optimizer_D.zero_grad()
             # Noise
             z = Tensor(np.random.normal(
-                0, 1, size=(batch_size, args.random_dim)))
+                0, 1, size=(batch_size, args.random_dim)), device=args.device)
             # Generate synthetic examples
             batch_synthetic = model.G(z).detach()  # No gradient for generator's parameters
             # Discriminator outputs
