@@ -47,6 +47,15 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
     Tensor = torch.cuda.FloatTensor if args.device == "cuda" else torch.FloatTensor
     train_size = len(train_loader.dataset)
     model.to(args.device)
+
+    # If differentially private
+    if args.is_DP and args.sigma is not None:
+        # Add hooks to introduce noise to gradient for differential privacy
+        for w in model.D.parameters():
+            w.register_hook(
+                lambda g: g + (1 / args.batch_size) * args.sigma
+                * torch.randn(w.shape, device=args.device)
+                )
     
     for epoch in range(args.epochs):
 
@@ -68,7 +77,8 @@ def train_gan(model, train_loader, optimizer_D, optimizer_G, args):
             loss_D = model.D.loss(y_real, y_synthetic)
             loss_D.backward()
             optimizer_D.step()
-            # Clip weights (Lipschitz)
+
+            # Clip weights (Lipschitz and privacy guarantee)
             for p in model.D.parameters():
                 p.data.clamp_(-args.clip_value, args.clip_value)
 
