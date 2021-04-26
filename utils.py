@@ -109,3 +109,18 @@ def attribute_disclosure(train_df, synthetic_df, m, s, k):
                 errors += 1
     # return errors/m  # Mean error
     return errors
+
+
+def inception_score(p_yx, eps=1E-16):
+    # https://machinelearningmastery.com/how-to-implement-the-inception-score-from-scratch-for-evaluating-generated-images/
+	# p(y)
+	p_y = np.expand_dims(p_yx.mean(axis=0), 0)
+	# kl divergence for each example
+	kl_d = p_yx * (np.log(p_yx + eps) - np.log(p_y + eps))
+	# sum over classes
+	sum_kl_d = kl_d.sum(axis=1)
+	# average over example
+	avg_kl_d = np.mean(sum_kl_d)
+	# undo the logs
+	is_score = np.exp(avg_kl_d)
+	return is_score
