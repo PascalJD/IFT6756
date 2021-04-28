@@ -24,7 +24,7 @@ def train_val_test_split(df,
                          data_folder='/content/gdrive/MyDrive/IFT6756/data/TrainValTest',
                          save=True,
                          random_state=42,
-                         shuffle=True,):
+                         shuffle=True):
     if ignore_pumas:
         df = df.drop(['PUMA', 'ST'], axis=1)
 
@@ -43,6 +43,21 @@ def train_val_test_split(df,
         test.to_csv(path_or_buf=data_folder+"/test.csv")
 
     return train, val, test
+
+
+def train_test(df, test_size=0.3, ignore_pumas=True, data_folder='/content/gdrive/MyDrive/IFT6756/data/TrainValTest', save=True, random_state=42, shuffle=True):
+    if ignore_pumas:
+        df = df.drop(['PUMA', 'ST'], axis=1)
+
+    train, test = train_test_split(df,
+                                   test_size=test_size,
+                                   random_state=random_state,
+                                   shuffle=shuffle)
+    if save:
+        train.to_csv(path_or_buf=data_folder+"/train_only.csv")
+        test.to_csv(path_or_buf=data_folder+"/test_only.csv")
+
+    return train, test
 
 
 def generate_samples(generator, batch_size, args):
@@ -109,18 +124,3 @@ def attribute_disclosure(train_df, synthetic_df, m, s, k):
                 errors += 1
     # return errors/m  # Mean error
     return errors
-
-
-def inception_score(p_yx, eps=1E-16):
-    # https://machinelearningmastery.com/how-to-implement-the-inception-score-from-scratch-for-evaluating-generated-images/
-	# p(y)
-	p_y = np.expand_dims(p_yx.mean(axis=0), 0)
-	# kl divergence for each example
-	kl_d = p_yx * (np.log(p_yx + eps) - np.log(p_y + eps))
-	# sum over classes
-	sum_kl_d = kl_d.sum(axis=1)
-	# average over example
-	avg_kl_d = np.mean(sum_kl_d)
-	# undo the logs
-	is_score = np.exp(avg_kl_d)
-	return is_score
